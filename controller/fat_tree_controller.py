@@ -9,6 +9,8 @@ log = core.getLogger()
 class FatTreeController:
 
     def __init__(self):
+        self.switches = {}
+        self.hosts = {}
         core.call_when_ready(
             self.startup, ('openflow', 'openflow_discovery', 'host_tracker'))
 
@@ -22,13 +24,17 @@ class FatTreeController:
         """
         Ref: https://noxrepo.github.io/pox-doc/html/#connectionup
         """
-        log.info("Switch %s has come up.", dpid_to_str(event.dpid))
+        dpid = dpid_to_str(event.dpid)
+        log.info("Switch %s has come up.", dpid)
+        if not dpid in self.switches:
+            self.switches[dpid] = {}
+        log.info("Switches: %s.", self.switches)
 
     def _handle_ConnectionDown(self, event):
         """
         Ref: https://noxrepo.github.io/pox-doc/html/#connectiondown
         """
-        log.info("Switch %s has come down.", dpid_to_str(event.dpid))
+        # log.info("Switch %s has come down.", dpid_to_str(event.dpid))
 
     def _handle_HostEvent(self, event):
         """
@@ -38,9 +44,9 @@ class FatTreeController:
         Args:
             event: HostEvent listening to core.host_tracker
         """
-        log.info("Host %s has come up.", event.entry.macaddr.toStr())
-        # macaddr = event.entry.macaddr.toStr()
-        # port = event.entry.port
+        # la mac del host y al sw y puerto al que esta conectado
+        # log.info("Host %s is connected to %s:%s.", event.entry.macaddr.toStr(),
+                # dpid_to_str(event.entry.dpid), event.entry.port)
 
     def _handle_PortStatus(self, event):
         """Called when:
@@ -54,13 +60,13 @@ class FatTreeController:
         else:
             action = "modified"
 
-        print "\nPort %s on Switch %s has been %s." % (event.port, event.dpid, action)
+        # print "\nPort %s on Switch %s has been %s." % (event.port, event.dpid, action)
 
     def _handle_FlowRemoved(self, event):
         """
         Ref: https://noxrepo.github.io/pox-doc/html/#flowremoved
         """
-        print('\nFlowRemoved', event)
+        # print('\nFlowRemoved', event)
 
     def _handle_PacketIn(self, event):
         """Called when:
@@ -69,8 +75,8 @@ class FatTreeController:
         Ref: https://noxrepo.github.io/pox-doc/html/#packetin
         """
         packet = event.parsed
-        log.info("Packet arrived to switch %s:%s from %s to %s",
-                 dpid_to_str(event.dpid), event.port, packet.src, packet.dst)
+        # log.info("Packet arrived to switch %s:%s from %s to %s",
+                #  dpid_to_str(event.dpid), event.port, packet.src, packet.dst)
 
     def _handle_LinkEvent(self, event):
         """
@@ -86,6 +92,11 @@ class FatTreeController:
         link = event.link
         log.info("Link has been %s from %s:%s to %s:%s", action, dpid_to_str(
             link.dpid1), link.port1, dpid_to_str(link.dpid2), link.port2)
+        dpid1 = dpid_to_str(link.dpid1)
+        dpid2 = dpid_to_str(link.dpid2)
+        self.switches[dpid1][link.port1] = dpid2
+        self.switches[dpid2][link.port2] = dpid1
+        log.info("Switches: %s.", self.switches)
 
 def launch():
     core.registerNew(FatTreeController)
