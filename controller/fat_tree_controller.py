@@ -9,7 +9,9 @@ log = core.getLogger()
 class FatTreeController:
 
     def __init__(self):
+        # keys sw_dpid, values {sw_port: sw_dpid_linked or host_mac_linked}
         self.switches = {}
+        # keys host_mac, values (sw_dpid_linked, sw_port_linked}
         self.hosts = {}
         core.call_when_ready(
             self.startup, ('openflow', 'openflow_discovery', 'host_tracker'))
