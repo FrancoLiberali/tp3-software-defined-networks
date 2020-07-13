@@ -6,6 +6,9 @@ from pox.lib.util import dpid_to_str
 
 log = core.getLogger()
 
+SW_DPID_INDEX = 0
+SW_PORT_INDEX = 1
+
 class FatTreeController:
 
     def __init__(self):
@@ -13,6 +16,8 @@ class FatTreeController:
         self.switches = {}
         # keys host_mac, values (sw_dpid_linked, sw_port_linked}
         self.hosts = {}
+        self.sws_linked_to_a_host = []
+        self.shortests_paths = {}
         core.call_when_ready(
             self.startup, ('openflow', 'openflow_discovery', 'host_tracker'))
 
@@ -21,6 +26,10 @@ class FatTreeController:
         core.openflow_discovery.addListeners(self)
         core.host_tracker.addListenerByName("HostEvent", self._handle_HostEvent)
         log.info('Controller initialized')
+
+    def calculate_switches_linked_to_a_host(self):
+        self.sws_linked_to_a_host = set(
+            map(lambda sw_dpid_and_port: sw_dpid_and_port[SW_DPID_INDEX], self.hosts.values()))
 
     def _handle_ConnectionUp(self, event):
         """
@@ -56,6 +65,12 @@ class FatTreeController:
         self.hosts[host_mac] = (sw_dpid, sw_port)
         log.info("Switches: %s.", self.switches)
         log.info("Hosts: %s.", self.hosts)
+
+        old_sws_linked_to_a_host = self.sws_linked_to_a_host
+        self.calculate_switches_linked_to_a_host()
+        if old_sws_linked_to_a_host != self.sws_linked_to_a_host:
+            log.info("Switches linked to a host: %s.",
+                     self.sws_linked_to_a_host)
 
     def _handle_PortStatus(self, event):
         """Called when:
