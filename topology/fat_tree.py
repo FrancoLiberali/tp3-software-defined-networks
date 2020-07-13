@@ -41,7 +41,7 @@ class FatTreeTopo(Topo):
         return 0
 
     def _leaf_level(self):
-        return self.levels - 1 if self.levels > 0 else 0
+        return self.levels - 1
 
     def _build(self):
         curr_lvl = self._leaf_level()
@@ -95,7 +95,7 @@ class FatTreeTopo(Topo):
                 self.addLink(host, switch)
 
     def _switch_name(self, lvl, sw_number):
-        return 's{}_{}'.format(lvl, sw_number)
+        return 's{}_{}'.format(sw_number, lvl)
 
     def _host_name(self):
         return 'h{}'.format(len(self.hosts()) + 1)
