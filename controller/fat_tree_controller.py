@@ -52,16 +52,19 @@ class FatTreeController:
         Args:
             event: HostEvent listening to core.host_tracker
         """
-        # la mac del host y al sw y puerto al que esta conectado
         sw_dpid = dpid_to_str(event.entry.dpid)
         sw_port = event.entry.port
         host_mac = event.entry.macaddr.toStr()
-        log.info("Host %s is connected to %s:%s.", host_mac,
+        if event.leave:
+            log.info("Host %s has disconnected from %s:%s.", host_mac,
                  sw_dpid, sw_port)
-        self.hosts[host_mac] = (sw_dpid, sw_port)
-        log.info("Switches: %s.", self.switches)
-        log.info("Hosts: %s.", self.hosts)
+            del self.hosts[host_mac]
+        else:
+            log.info("Host %s has connected to %s:%s.", host_mac,
+                     sw_dpid, sw_port)
+            self.hosts[host_mac] = (sw_dpid, sw_port)
 
+        log.info("Hosts: %s.", self.hosts)
         self.paths_finder.notifyHostsChanged(self.switches,self.hosts)
 
     def _handle_PortStatus(self, event):
