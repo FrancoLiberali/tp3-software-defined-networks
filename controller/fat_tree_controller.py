@@ -68,7 +68,18 @@ class FatTreeController:
                     # list(actual_path) to pass as copy
                     for path in self.find_paths(sw, sw_destiny, list(actual_path), visited_sws):
                         paths_from_the_next_level.append(path)
-        return paths_from_the_next_level
+        return self.keep_only_shortests(paths_from_the_next_level)
+
+    def keep_only_shortests(self, paths):
+        if (len(paths) > 0):
+            shortest = len(paths[0])
+            for path in paths:
+                if len(path) < shortest:
+                    shortest = len(path)
+            return list(filter(lambda path: len(path) == shortest, paths))
+        else:
+            # no posible path between two switches
+            return []
 
     def calculate_switches_linked_to_a_host(self):
         self.sws_linked_to_a_host = set(
