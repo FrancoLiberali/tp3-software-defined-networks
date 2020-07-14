@@ -38,7 +38,11 @@ class FatTreeController:
         """
         Ref: https://noxrepo.github.io/pox-doc/html/#connectiondown
         """
-        # log.info("Switch %s has come down.", dpid_to_str(event.dpid))
+        dpid = dpid_to_str(event.dpid)
+        log.info("Switch %s has come down.", dpid)
+        poped = self.switches.pop(dpid, None)
+        if poped:
+            self.paths_finder.notifyLinksChanged(self.switches)
 
     def _handle_HostEvent(self, event):
         """
