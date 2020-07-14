@@ -3,7 +3,7 @@ from pox.core import core
 import pox.openflow.discovery
 import pox.host_tracker
 from pox.lib.util import dpid_to_str
-from extensions.shortest_paths_finder import ShortestPathsFinder
+from extensions.shortest_paths_finder import ShortestPathsFinder, SW_DPID_INDEX, SW_PORT_INDEX
 
 log = core.getLogger()
 
@@ -39,10 +39,16 @@ class FatTreeController:
         Ref: https://noxrepo.github.io/pox-doc/html/#connectiondown
         """
         dpid = dpid_to_str(event.dpid)
+        assert dpid in self.switches
+
         log.info("Switch %s has come down.", dpid)
-        poped = self.switches.pop(dpid, None)
-        if poped:
-            self.paths_finder.notifyLinksChanged(self.switches)
+        self.switches.pop(dpid, None)
+        for host, sw_dpid_and_port in self.hosts.items():
+            if sw_dpid_and_port[SW_DPID_INDEX] == dpid:
+                # the host is not connected to any switch so its not in the topology anymore
+                self.hosts.pop(host)
+        self.paths_finder.notifyHostsChanged(self.switches, self.hosts)
+        log.info("Switches: %s.", self.switches)
 
     def _handle_HostEvent(self, event):
         """
@@ -101,22 +107,35 @@ class FatTreeController:
         """
         Called when openflow_discovery discovers a new link
         """
-        if event.added:
-            action = "added"
-        elif event.removed:
-            action = "removed"
-        else:
-            action = "something else"
-
         link = event.link
-        log.info("Link has been %s from %s:%s to %s:%s", action, dpid_to_str(
-            link.dpid1), link.port1, dpid_to_str(link.dpid2), link.port2)
         dpid1 = dpid_to_str(link.dpid1)
         dpid2 = dpid_to_str(link.dpid2)
-        self.switches[dpid1][link.port1] = dpid2
-        self.switches[dpid2][link.port2] = dpid1
-        log.info("Switches: %s.", self.switches)
-        self.paths_finder.notifyLinksChanged(self.switches)
+
+        assert dpid1 in self.switches
+        assert dpid2 in self.switches
+
+        # check if not setted yet because the link event is raised in both ways
+        if (
+            event.added
+            and self.switches[dpid1].get(link.port1, None) != dpid2
+            and self.switches[dpid2].get(link.port2, None) != dpid1
+        ):
+            log.info("Link has been added from %s:%s to %s:%s", dpid1, link.port1, dpid2, link.port2)
+            self.switches[dpid1][link.port1] = dpid2
+            self.switches[dpid2][link.port2] = dpid1
+            log.info("Switches: %s.", self.switches)
+            self.paths_finder.notifyLinksChanged(self.switches)
+        # idem check if setted because the link event is raised in both ways
+        elif (
+            event.removed
+            and link.port1 in self.switches[dpid1]
+            and link.port2 in self.switches[dpid2]
+        ):
+            log.info("Link has been removed from %s:%s to %s:%s", dpid1, link.port1, dpid2, link.port2)
+            self.switches[dpid1].pop(link.port1)
+            self.switches[dpid2].pop(link.port2)
+            log.info("Switches: %s.", self.switches)
+            self.paths_finder.notifyLinksChanged(self.switches)
 
 def launch():
     core.registerNew(FatTreeController)
