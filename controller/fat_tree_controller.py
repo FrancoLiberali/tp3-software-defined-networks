@@ -12,7 +12,7 @@ SW_PORT_INDEX = 1
 class FatTreeController:
 
     def __init__(self):
-        # keys sw_dpid, values {sw_port: sw_dpid_linked or host_mac_linked}
+        # keys sw_dpid, values {sw_port: sw_dpid_linked}
         self.switches = {}
         # keys host_mac, values (sw_dpid_linked, sw_port_linked}
         self.hosts = {}
@@ -26,6 +26,49 @@ class FatTreeController:
         core.openflow_discovery.addListeners(self)
         core.host_tracker.addListenerByName("HostEvent", self._handle_HostEvent)
         log.info('Controller initialized')
+
+    def calculate_shortests_paths(self):
+        self.shortests_paths = {}
+
+        for sw_origin in list(self.sws_linked_to_a_host):
+            for sw_destiny in list(self.sws_linked_to_a_host):
+                if (
+                    sw_origin != sw_destiny
+                    and not sw_destiny in self.shortests_paths.get(sw_origin, [])
+                    and not sw_origin in self.shortests_paths.get(sw_destiny, [])
+                ):
+                    shortests_paths = self.find_paths(sw_origin, sw_destiny, [], [])
+                    self.set_paths(sw_origin, sw_destiny, shortests_paths)
+                    shortests_paths = list(map(lambda path: list(reversed(path)), shortests_paths))
+                    self.set_paths(sw_destiny, sw_origin, shortests_paths)
+
+        log.info("Shortest paths: %s.", self.shortests_paths)
+
+    def set_paths(self, sw_origin, sw_destiny, paths):
+        shortests_paths_from_origin = self.shortests_paths.get(sw_origin, {})
+        shortests_paths_from_origin[sw_destiny] = paths
+        self.shortests_paths[sw_origin] = shortests_paths_from_origin
+
+    def find_paths(self, sw_origin, sw_destiny, actual_path, visited_sws):
+        actual_path.append(sw_origin)
+        paths_from_the_next_level = []
+        visited_sws.append(sw_origin)
+
+        linked_sws = self.switches[sw_origin].values()
+        if sw_destiny in linked_sws:
+            actual_path.append(sw_destiny)
+            return [actual_path]
+        else:
+            old_visited_sws = visited_sws
+            # update visited_sws to have the sws in the next level
+            visited_sws = visited_sws + linked_sws
+            for sw in linked_sws:
+                # no go to a sw in a higher level
+                if sw not in old_visited_sws:
+                    # list(actual_path) to pass as copy
+                    for path in self.find_paths(sw, sw_destiny, list(actual_path), visited_sws):
+                        paths_from_the_next_level.append(path)
+        return paths_from_the_next_level
 
     def calculate_switches_linked_to_a_host(self):
         self.sws_linked_to_a_host = set(
@@ -61,7 +104,6 @@ class FatTreeController:
         host_mac = event.entry.macaddr.toStr()
         log.info("Host %s is connected to %s:%s.", host_mac,
                  sw_dpid, sw_port)
-        self.switches[sw_dpid][sw_port] = host_mac
         self.hosts[host_mac] = (sw_dpid, sw_port)
         log.info("Switches: %s.", self.switches)
         log.info("Hosts: %s.", self.hosts)
@@ -71,6 +113,7 @@ class FatTreeController:
         if old_sws_linked_to_a_host != self.sws_linked_to_a_host:
             log.info("Switches linked to a host: %s.",
                      self.sws_linked_to_a_host)
+            self.calculate_shortests_paths()
 
     def _handle_PortStatus(self, event):
         """Called when:
@@ -121,6 +164,7 @@ class FatTreeController:
         self.switches[dpid1][link.port1] = dpid2
         self.switches[dpid2][link.port2] = dpid1
         log.info("Switches: %s.", self.switches)
+        self.calculate_shortests_paths()
 
 def launch():
     core.registerNew(FatTreeController)
