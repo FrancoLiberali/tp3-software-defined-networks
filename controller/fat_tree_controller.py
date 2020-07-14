@@ -47,7 +47,9 @@ class FatTreeController:
             if sw_dpid_and_port[SW_DPID_INDEX] == dpid:
                 # the host is not connected to any switch so its not in the topology anymore
                 self.hosts.pop(host)
-        self.paths_finder.notifyHostsChanged(self.switches, self.hosts)
+                log.info("Hosts: %s.", self.hosts)
+                self.paths_finder.notifyHostsChanged(self.switches, self.hosts)
+        self.paths_finder.notifyLinksChanged(self.switches)
         log.info("Switches: %s.", self.switches)
 
     def _handle_HostEvent(self, event):
@@ -64,7 +66,8 @@ class FatTreeController:
         if event.leave:
             log.info("Host %s has disconnected from %s:%s.", host_mac,
                  sw_dpid, sw_port)
-            del self.hosts[host_mac]
+            # with default because it could be deleted if the host has no switch
+            self.hosts.pop(host_mac, None)
         else:
             log.info("Host %s has connected to %s:%s.", host_mac,
                      sw_dpid, sw_port)
