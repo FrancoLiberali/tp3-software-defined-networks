@@ -5,6 +5,7 @@ import pox.host_tracker
 import pox.openflow.libopenflow_01 as of
 from pox.lib.util import dpid_to_str
 from extensions.shortest_paths_finder import ShortestPathsFinder, SW_DPID_INDEX, SW_PORT_INDEX
+from extensions.switch import Switch
 
 log = core.getLogger()
 
@@ -32,7 +33,7 @@ class FatTreeController:
         dpid = dpid_to_str(event.dpid)
         log.info("Switch %s has come up.", dpid)
         if not dpid in self.switches:
-            self.switches[dpid] = {}
+            self.switches[dpid] = Switch(dpid, event.connection)
         log.info("Switches: %s.", self.switches)
 
     def _handle_ConnectionDown(self, event):
@@ -77,26 +78,6 @@ class FatTreeController:
         log.info("Hosts: %s.", self.hosts)
         self.paths_finder.notifyHostsChanged(self.switches,self.hosts)
 
-    def _handle_PortStatus(self, event):
-        """Called when:
-        - A port status changes in a switch.
-        Ref: https://noxrepo.github.io/pox-doc/html/#portstatus
-        """
-        if event.added:
-            action = "added"
-        elif event.deleted:
-            action = "removed"
-        else:
-            action = "modified"
-
-        # print "\nPort %s on Switch %s has been %s." % (event.port, event.dpid, action)
-
-    def _handle_FlowRemoved(self, event):
-        """
-        Ref: https://noxrepo.github.io/pox-doc/html/#flowremoved
-        """
-        # print('\nFlowRemoved', event)
-
     def _handle_PacketIn(self, event):
         """Called when:
         - A packet does not have a matching FlowEntry in switch.
@@ -139,26 +120,28 @@ class FatTreeController:
         assert dpid1 in self.switches
         assert dpid2 in self.switches
 
+        sw_1 = self.switches[dpid1]
+        sw_2 = self.switches[dpid2]
+        sw_linked_by_1 = sw_1.get_switch_linked_on(link.port1)
+        sw_linked_by_2 = sw_2.get_switch_linked_on(link.port2)
         # check if not setted yet because the link event is raised in both ways
         if (
             event.added
-            and self.switches[dpid1].get(link.port1, None) != dpid2
-            and self.switches[dpid2].get(link.port2, None) != dpid1
+            and (sw_linked_by_1 != sw_2 or sw_linked_by_2 != sw_1)
         ):
             log.info("Link has been added from %s:%s to %s:%s", dpid1, link.port1, dpid2, link.port2)
-            self.switches[dpid1][link.port1] = dpid2
-            self.switches[dpid2][link.port2] = dpid1
+            sw_1.add_link(link.port1, sw_2)
+            sw_2.add_link(link.port2, sw_1)
             log.info("Switches: %s.", self.switches)
             self.paths_finder.notifyLinksChanged(self.switches)
         # idem check if setted because the link event is raised in both ways
         elif (
             event.removed
-            and link.port1 in self.switches[dpid1]
-            and link.port2 in self.switches[dpid2]
+            and (sw_linked_by_1 or sw_linked_by_2)
         ):
             log.info("Link has been removed from %s:%s to %s:%s", dpid1, link.port1, dpid2, link.port2)
-            self.switches[dpid1].pop(link.port1)
-            self.switches[dpid2].pop(link.port2)
+            sw_1.remove_link(link.port1)
+            sw_2.remove_link(link.port2)
             log.info("Switches: %s.", self.switches)
             self.paths_finder.notifyLinksChanged(self.switches)
 

@@ -1,4 +1,5 @@
 from pox.core import core
+from .path import Path
 
 log = core.getLogger()
 
@@ -8,6 +9,7 @@ SW_PORT_INDEX = 1
 class ShortestPathsFinder:
     def __init__(self):
         self.sws_linked_to_a_host = []
+        # origin_dpid: {destiny_dpid: Path}
         self.shortest_paths = {}
 
     def notifyHostsChanged(self, switches, hosts):
@@ -33,13 +35,9 @@ class ShortestPathsFinder:
                 if (
                     sw_origin != sw_destiny
                     and not sw_destiny in self.shortest_paths.get(sw_origin, [])
-                    and not sw_origin in self.shortest_paths.get(sw_destiny, [])
                 ):
-                    shortest_paths = self._find_paths(switches, sw_origin, sw_destiny, [], [])
+                    shortest_paths = self._find_paths(switches, switches[sw_origin], switches[sw_destiny], Path(), [])
                     self._set_paths(sw_origin, sw_destiny, shortest_paths)
-                    shortest_paths = list(
-                        map(lambda path: list(reversed(path)), shortest_paths))
-                    self._set_paths(sw_destiny, sw_origin, shortest_paths)
 
         log.info("Shortest paths: %s.", self.shortest_paths)
 
@@ -49,23 +47,26 @@ class ShortestPathsFinder:
         self.shortest_paths[sw_origin] = shortest_paths_from_origin
 
     def _find_paths(self, switches, sw_origin, sw_destiny, actual_path, visited_sws):
-        actual_path.append(sw_origin)
-        paths_from_the_next_level = []
         visited_sws.append(sw_origin)
 
-        linked_sws = switches[sw_origin].values()
-        if sw_destiny in linked_sws:
-            actual_path.append(sw_destiny)
-            return [actual_path]
+        port_to_destiny = sw_origin.get_port_to(sw_destiny)
+        if port_to_destiny:
+            actual_path.add_jump(sw_origin, port_to_destiny)
+            actual_path.add_destiny(sw_destiny)
+            return [actual_path] # returns a list of posible paths
         else:
+            paths_from_the_next_level = []
+            linked_sws = sw_origin.get_linked_switches()
+
             old_visited_sws = visited_sws
             # update visited_sws to have the sws in the next level
             visited_sws = visited_sws + linked_sws
-            for sw in linked_sws:
+            for port, sw in sw_origin.get_links():
                 # no go to a sw in a higher level
                 if sw not in old_visited_sws:
-                    # list(actual_path) to pass as copy
-                    for path in self._find_paths(switches, sw, sw_destiny, list(actual_path), visited_sws):
+                    new_actual_path = actual_path.copy()
+                    new_actual_path.add_jump(sw_origin, port)
+                    for path in self._find_paths(switches, sw, sw_destiny, new_actual_path, visited_sws):
                         paths_from_the_next_level.append(path)
         return self._keep_only_shortests(paths_from_the_next_level)
 
