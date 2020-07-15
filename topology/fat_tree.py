@@ -55,7 +55,7 @@ class FatTreeTopo(Topo):
 
     def _build_lvl_switches(self, lvl, prev_lvl_sw):
         sw_quantity = 2**lvl
-        curr_sw = 2 ** lvl - 1
+        curr_sw = 2 ** lvl
         switches = []
 
         for _ in range(sw_quantity):
