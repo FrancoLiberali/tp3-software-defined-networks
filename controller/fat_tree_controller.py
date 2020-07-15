@@ -100,23 +100,32 @@ class FatTreeController:
             assert src_mac in self.hosts
             assert dst_mac in self.hosts
 
+            src_ip = ip_packet.srcip
+            dst_ip = ip_packet.dstip
+
             # src and dest connected to the same sw
             if self.hosts[src_mac][SW_DPID_INDEX] == self.hosts[dst_mac][SW_DPID_INDEX]:
-                table_modification = self._create_table_mod_add_rule(
-                    ip_packet.srcip, ip_packet.dstip)
-                table_modification.actions.append(
-                    of.ofp_action_output(port=self.hosts[dst_mac][SW_PORT_INDEX]))
-                event.connection.send(table_modification)
+                self._set_shared_switch_output_port(
+                    event.connection, src_ip, dst_ip, dst_mac)
+                # set the response path too, to not come to the controller again on response
+                self._set_shared_switch_output_port(
+                    event.connection, dst_ip, src_ip, src_mac)
             else:
                 sw_linked_to_src = self.switches[self.hosts[src_mac]
                                                  [SW_DPID_INDEX]]
                 sw_linked_to_dst = self.switches[self.hosts[dst_mac]
                                                  [SW_DPID_INDEX]]
                 self._set_path(sw_linked_to_src, sw_linked_to_dst,
-                               dst_mac, ip_packet.srcip, ip_packet.dstip)
+                               dst_mac, src_ip, dst_ip)
                 # set the response path too, to not come to the controller again on response
                 self._set_path(sw_linked_to_dst, sw_linked_to_src,
-                               src_mac, ip_packet.dstip, ip_packet.srcip)
+                               src_mac, dst_ip, src_ip)
+
+    def _set_shared_switch_output_port(self, connection, src_ip, dst_ip, dst_mac):
+        table_modification = self._create_table_mod_add_rule(src_ip, dst_ip)
+        table_modification.actions.append(
+            of.ofp_action_output(port=self.hosts[dst_mac][SW_PORT_INDEX]))
+        connection.send(table_modification)
 
     def _set_path(self, src, dst, dst_mac, src_ip, dst_ip):
         path = self.paths_finder.get_path(
