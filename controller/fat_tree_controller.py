@@ -4,7 +4,6 @@ import pox.openflow.discovery
 import pox.host_tracker
 import pox.openflow.libopenflow_01 as of
 from pox.lib.util import dpid_to_str
-from pox.lib.packet import ethernet
 from extensions.shortest_paths_finder import ShortestPathsFinder, SW_DPID_INDEX, SW_PORT_INDEX
 from extensions.switch import Switch
 
@@ -93,23 +92,27 @@ class FatTreeController:
             ip_packet = eth_packet.payload
             src_mac = eth_packet.src.toStr()
             dst_mac = eth_packet.dst.toStr()
-            log.info("Packet arrived to switch %s:%s from %s<%s> to %s<%s>",
-                     dpid_to_str(event.dpid), event.port, src_mac,
-                     ip_packet.srcip, dst_mac, ip_packet.dstip)
+            dpid = dpid_to_str(event.dpid)
 
+            assert dpid in self.switches
             assert src_mac in self.hosts
             assert dst_mac in self.hosts
 
             src_ip = ip_packet.srcip
             dst_ip = ip_packet.dstip
 
+            log.info("Packet arrived to switch %s:%s from %s<%s> to %s<%s>",
+                     dpid, event.port, src_mac,
+                     src_ip, dst_mac, dst_ip)
+
             # src and dest connected to the same sw
             if self.hosts[src_mac][SW_DPID_INDEX] == self.hosts[dst_mac][SW_DPID_INDEX]:
+                sw = self.switches[dpid]
                 self._set_shared_switch_output_port(
-                    event.connection, src_ip, dst_ip, dst_mac)
+                    sw, src_ip, dst_ip, dst_mac)
                 # set the response path too, to not come to the controller again on response
                 self._set_shared_switch_output_port(
-                    event.connection, dst_ip, src_ip, src_mac)
+                    sw, dst_ip, src_ip, src_mac)
             else:
                 sw_linked_to_src = self.switches[self.hosts[src_mac]
                                                  [SW_DPID_INDEX]]
@@ -125,35 +128,17 @@ class FatTreeController:
                                            action=of.ofp_action_output(port=of.OFPP_TABLE))
             event.connection.send(packet_out)
 
-    def _set_shared_switch_output_port(self, connection, src_ip, dst_ip, dst_mac):
-        table_modification = self._create_table_mod_add_rule(src_ip, dst_ip)
-        table_modification.actions.append(
-            of.ofp_action_output(port=self.hosts[dst_mac][SW_PORT_INDEX]))
-        connection.send(table_modification)
+    def _set_shared_switch_output_port(self, sw, src_ip, dst_ip, dst_mac):
+        sw.add_action_output(
+            src_ip, dst_ip, self.hosts[dst_mac][SW_PORT_INDEX])
 
     def _set_path(self, src, dst, dst_mac, src_ip, dst_ip):
         path = self.paths_finder.get_path(
             src.dpid, dst.dpid)
         for sw, output_port in path:
-            table_modification = self._create_table_mod_add_rule(
-                src_ip, dst_ip)
-            # TODO add dst_port, src_port and protocol of table_modification.match to complete flow info
-            # the last switch
-            if not output_port:
+            if not output_port: # the last switch
                 output_port = self.hosts[dst_mac][SW_PORT_INDEX]
-            table_modification.actions.append(
-                of.ofp_action_output(port=output_port))
-            sw.connection.send(table_modification)
-
-
-    def _create_table_mod_add_rule(self, src_ip, dst_ip):
-        table_modification = of.ofp_flow_mod()
-        table_modification.command = of.OFPFC_ADD  # add a rule
-        table_modification.match.dl_type = ethernet.IP_TYPE
-        table_modification.match.nw_src = src_ip
-        table_modification.match.nw_dst = dst_ip
-        return table_modification
-
+            sw.add_action_output(src_ip, dst_ip, output_port)
 
     def _handle_LinkEvent(self, event):
         """
