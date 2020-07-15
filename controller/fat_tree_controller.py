@@ -76,26 +76,6 @@ class FatTreeController:
         log.info("Hosts: %s.", self.hosts)
         self.paths_finder.notifyHostsChanged(self.switches,self.hosts)
 
-    def _handle_PortStatus(self, event):
-        """Called when:
-        - A port status changes in a switch.
-        Ref: https://noxrepo.github.io/pox-doc/html/#portstatus
-        """
-        if event.added:
-            action = "added"
-        elif event.deleted:
-            action = "removed"
-        else:
-            action = "modified"
-
-        # print "\nPort %s on Switch %s has been %s." % (event.port, event.dpid, action)
-
-    def _handle_FlowRemoved(self, event):
-        """
-        Ref: https://noxrepo.github.io/pox-doc/html/#flowremoved
-        """
-        # print('\nFlowRemoved', event)
-
     def _handle_PacketIn(self, event):
         """Called when:
         - A packet does not have a matching FlowEntry in switch.
