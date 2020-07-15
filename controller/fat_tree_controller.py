@@ -120,6 +120,10 @@ class FatTreeController:
                 # set the response path too, to not come to the controller again on response
                 self._set_path(sw_linked_to_dst, sw_linked_to_src,
                                src_mac, dst_ip, src_ip)
+            # dont lose the packet that generated the packet in
+            packet_out = of.ofp_packet_out(data=eth_packet,
+                                           action=of.ofp_action_output(port=of.OFPP_TABLE))
+            event.connection.send(packet_out)
 
     def _set_shared_switch_output_port(self, connection, src_ip, dst_ip, dst_mac):
         table_modification = self._create_table_mod_add_rule(src_ip, dst_ip)
