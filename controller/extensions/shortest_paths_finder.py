@@ -23,6 +23,13 @@ class ShortestPathsFinder:
     def notifyLinksChanged(self, switches):
         self._calculate_shortest_paths(switches)
 
+    def get_path(self, origin, destiny):
+        if origin in self.shortest_paths:
+            if destiny in self.shortest_paths[origin]:
+                # TODO use others paths when implementing load balancer
+                return self.shortest_paths[origin][destiny][0]
+        return None
+
     def _calculate_switches_linked_to_a_host(self, hosts):
         self.sws_linked_to_a_host = set(
             map(lambda sw_dpid_and_port: sw_dpid_and_port[SW_DPID_INDEX], hosts.values()))
