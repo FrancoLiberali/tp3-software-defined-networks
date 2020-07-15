@@ -2,6 +2,7 @@
 from pox.core import core
 import pox.openflow.discovery
 import pox.host_tracker
+import pox.openflow.libopenflow_01 as of
 from pox.lib.util import dpid_to_str
 from extensions.shortest_paths_finder import ShortestPathsFinder, SW_DPID_INDEX, SW_PORT_INDEX
 
@@ -101,10 +102,31 @@ class FatTreeController:
         - A packet does not have a matching FlowEntry in switch.
         - A packet matches with FlowEntry "send to controller action".
         Ref: https://noxrepo.github.io/pox-doc/html/#packetin
+        Ref response: https://noxrepo.github.io/pox-doc/html/#ofp-flow-mod-flow-table-modification
         """
-        packet = event.parsed
-        # log.info("Packet arrived to switch %s:%s from %s to %s",
-                #  dpid_to_str(event.dpid), event.port, packet.src, packet.dst)
+        eth_packet = event.parsed
+        if eth_packet.type == eth_packet.IP_TYPE:
+            ip_packet = eth_packet.payload
+            src_mac = eth_packet.src.toStr()
+            dst_mac = eth_packet.dst.toStr()
+            log.info("Packet arrived to switch %s:%s from %s<%s> to %s<%s>",
+                     dpid_to_str(event.dpid), event.port, src_mac,
+                     ip_packet.srcip, dst_mac, ip_packet.dstip)
+
+            assert src_mac in self.hosts
+            assert dst_mac in self.hosts
+
+            # src and dest connected to the same sw
+            if self.hosts[src_mac][SW_DPID_INDEX] == self.hosts[dst_mac][SW_DPID_INDEX]:
+                table_modification = of.ofp_flow_mod()
+                table_modification.command = of.OFPFC_ADD # add a rule
+                table_modification.match.dl_type = eth_packet.IP_TYPE
+                table_modification.match.nw_src = ip_packet.srcip
+                table_modification.match.nw_dst = ip_packet.dstip
+                table_modification.actions.append(
+                    of.ofp_action_output(port=self.hosts[dst_mac][SW_PORT_INDEX]))
+                event.connection.send(table_modification)
+
 
     def _handle_LinkEvent(self, event):
         """
