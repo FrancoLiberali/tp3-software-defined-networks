@@ -1,6 +1,6 @@
 class Path(list):
     """
-    List of tuple (switch, port) to expresses witch port output take in each switch,
+    List of tuple (switch, port) to express which port output take in each switch,
     in order to get a destiny
     the first switch is the origin and the last is the destiny.
     The port of the destiny whould be None because you allready are at destiny"""
