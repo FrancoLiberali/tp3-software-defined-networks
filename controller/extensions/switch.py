@@ -17,6 +17,9 @@ class Switch:
         return self.dpid == other.dpid
     return False
 
+  def __hash__(self):
+    return hash(self.dpid)
+
   def add_link(self, port, switch):
     self.links[port] = switch
 

@@ -3,25 +3,22 @@ from .path import Path
 
 log = core.getLogger()
 
-SW_DPID_INDEX = 0
-SW_PORT_INDEX = 1
-
 class ShortestPathsFinder:
     def __init__(self):
         self.sws_linked_to_a_host = []
         # origin_dpid: {destiny_dpid: Path}
         self.shortest_paths = {}
 
-    def notifyHostsChanged(self, switches, hosts):
+    def notifyHostsChanged(self, hosts):
         old_sws_linked_to_a_host = self.sws_linked_to_a_host
         self._calculate_switches_linked_to_a_host(hosts)
         if old_sws_linked_to_a_host != self.sws_linked_to_a_host:
             log.info("Switches linked to a host: %s.",
                      self.sws_linked_to_a_host)
-            self._calculate_shortest_paths(switches)
+            self._calculate_shortest_paths()
 
-    def notifyLinksChanged(self, switches):
-        self._calculate_shortest_paths(switches)
+    def notifyLinksChanged(self):
+        self._calculate_shortest_paths()
 
     def get_path(self, origin, destiny):
         if origin in self.shortest_paths:
@@ -31,29 +28,29 @@ class ShortestPathsFinder:
         return None
 
     def _calculate_switches_linked_to_a_host(self, hosts):
-        self.sws_linked_to_a_host = set(
-            map(lambda sw_dpid_and_port: sw_dpid_and_port[SW_DPID_INDEX], hosts.values()))
+        self.sws_linked_to_a_host = list(set(
+            map(lambda link_to_sw: link_to_sw.sw, hosts.values())))
 
-    def _calculate_shortest_paths(self, switches):
+    def _calculate_shortest_paths(self):
         self.shortest_paths = {}
 
-        for sw_origin in list(self.sws_linked_to_a_host):
-            for sw_destiny in list(self.sws_linked_to_a_host):
+        for sw_origin in self.sws_linked_to_a_host:
+            for sw_destiny in self.sws_linked_to_a_host:
                 if (
                     sw_origin != sw_destiny
-                    and not sw_destiny in self.shortest_paths.get(sw_origin, [])
+                    and not sw_destiny.dpid in self.shortest_paths.get(sw_origin.dpid, [])
                 ):
-                    shortest_paths = self._find_paths(switches, switches[sw_origin], switches[sw_destiny], Path(), [])
+                    shortest_paths = self._find_paths(sw_origin, sw_destiny, Path(), [])
                     self._set_paths(sw_origin, sw_destiny, shortest_paths)
 
         log.info("Shortest paths: %s.", self.shortest_paths)
 
     def _set_paths(self, sw_origin, sw_destiny, paths):
-        shortest_paths_from_origin = self.shortest_paths.get(sw_origin, {})
-        shortest_paths_from_origin[sw_destiny] = paths
-        self.shortest_paths[sw_origin] = shortest_paths_from_origin
+        shortest_paths_from_origin = self.shortest_paths.get(sw_origin.dpid, {})
+        shortest_paths_from_origin[sw_destiny.dpid] = paths
+        self.shortest_paths[sw_origin.dpid] = shortest_paths_from_origin
 
-    def _find_paths(self, switches, sw_origin, sw_destiny, actual_path, visited_sws):
+    def _find_paths(self, sw_origin, sw_destiny, actual_path, visited_sws):
         visited_sws.append(sw_origin)
 
         port_to_destiny = sw_origin.get_port_to(sw_destiny)
@@ -73,7 +70,7 @@ class ShortestPathsFinder:
                 if sw not in old_visited_sws:
                     new_actual_path = actual_path.copy()
                     new_actual_path.add_jump(sw_origin, port)
-                    for path in self._find_paths(switches, sw, sw_destiny, new_actual_path, visited_sws):
+                    for path in self._find_paths(sw, sw_destiny, new_actual_path, visited_sws):
                         paths_from_the_next_level.append(path)
         return self._keep_only_shortests(paths_from_the_next_level)
 
