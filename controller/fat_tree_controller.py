@@ -126,7 +126,7 @@ class FatTreeController:
             # dont lose the packet that generated the packet in
             packet_out = of.ofp_packet_out(data=eth_packet,
                                            action=of.ofp_action_output(port=of.OFPP_TABLE))
-            event.connection.send(packet_out)
+            self.switches[self.hosts[src_mac][SW_DPID_INDEX]].connection.send(packet_out)
 
     def _set_shared_switch_output_port(self, sw, src_ip, dst_ip, dst_mac):
         sw.add_action_output(
