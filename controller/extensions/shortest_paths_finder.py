@@ -1,13 +1,14 @@
 from pox.core import core
-from .path import Path
+from path import Path
+from round_robin_path_balancer import RoundRobinPathBalancer
 
 log = core.getLogger()
 
 class ShortestPathsFinder:
     def __init__(self):
         self.sws_linked_to_a_host = []
-        # origin_dpid: {destiny_dpid: Path}
-        self.shortest_paths = {}
+        self.shortest_paths = {}    # origin_dpid: {destiny_dpid: Path}
+        self.path_balancer = RoundRobinPathBalancer()
 
     def notifyHostsChanged(self, hosts):
         old_sws_linked_to_a_host = self.sws_linked_to_a_host
@@ -22,9 +23,11 @@ class ShortestPathsFinder:
 
     def get_path(self, origin, destiny):
         if origin in self.shortest_paths:
-            if destiny in self.shortest_paths[origin]:
-                # TODO use others paths when implementing load balancer
-                return self.shortest_paths[origin][destiny][0]
+            if destiny in self.shortest_paths[origin] and len(self.shortest_paths[origin][destiny]) > 0:
+                posible_paths = self.shortest_paths[origin][destiny]
+                return self.path_balancer.get_balanced(origin, destiny, posible_paths)
+
+        log.warn("No posible path beetween switches %s and %s.", origin, destiny)
         return None
 
     def _calculate_switches_linked_to_a_host(self, hosts):
@@ -32,7 +35,7 @@ class ShortestPathsFinder:
             map(lambda link_to_sw: link_to_sw.sw, hosts.values())))
 
     def _calculate_shortest_paths(self):
-        self.shortest_paths = {}
+        self._reset_paths()
 
         for sw_origin in self.sws_linked_to_a_host:
             for sw_destiny in self.sws_linked_to_a_host:
@@ -42,8 +45,6 @@ class ShortestPathsFinder:
                 ):
                     shortest_paths = self._find_paths(sw_origin, sw_destiny, Path(), [])
                     self._set_paths(sw_origin, sw_destiny, shortest_paths)
-
-        log.info("Shortest paths: %s.", self.shortest_paths)
 
     def _set_paths(self, sw_origin, sw_destiny, paths):
         shortest_paths_from_origin = self.shortest_paths.get(sw_origin.dpid, {})
@@ -75,7 +76,7 @@ class ShortestPathsFinder:
         return self._keep_only_shortests(paths_from_the_next_level)
 
     def _keep_only_shortests(self, paths):
-        if (len(paths) > 0):
+        if len(paths) > 0:
             shortest = len(paths[0])
             for path in paths:
                 if len(path) < shortest:
@@ -84,3 +85,7 @@ class ShortestPathsFinder:
         else:
             # no posible path between two switches
             return []
+
+    def _reset_paths(self):
+        self.shortest_paths = {}
+        self.path_balancer.reset()
