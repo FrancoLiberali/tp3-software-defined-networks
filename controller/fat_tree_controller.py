@@ -74,7 +74,8 @@ class FatTreeController:
             self.hosts[host_mac] = LinkToSwitch(self.switches, sw_dpid, sw_port)
 
         log.info("Hosts: %s.", self.hosts)
-        self.paths_finder.notifyHostsChanged(self.hosts)
+        if sw_dpid in self.switches: # only find new paths if the linked sw is already up
+            self.paths_finder.notifyHostsChanged(self.hosts)
 
     def _handle_PacketIn(self, event):
         """Called when:
