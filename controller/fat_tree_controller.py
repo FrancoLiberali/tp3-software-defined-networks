@@ -122,7 +122,7 @@ class FatTreeController:
         sw.add_action_output(flow.reverse(), self.hosts[src_mac].port)  # between them will be the same but reversed
 
     def _set_path(self, src_sw, dst_sw, src_mac, dst_mac, flow):
-        path_to = self.paths_finder.get_path(src_sw.dpid, dst_sw.dpid)      # Since I'm already going from one host to
+        path_to = self.paths_finder.get_path(src_sw.dpid, dst_sw.dpid)      # Since I'm already going from one switch to
         path_from = self.paths_finder.get_path(dst_sw.dpid, src_sw.dpid)    # another, I should define the way back as well
         paths = [path_to, path_from]                                        # in order to avoid another trip to controller
         macs = [dst_mac, src_mac]
