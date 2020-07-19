@@ -43,13 +43,13 @@ class FatTreeController:
         assert dpid in self.switches
 
         log.info("Switch %s has come down.", dpid)
-        self.switches.pop(dpid, None)
         for host, link_to_sw in self.hosts.items():
             if link_to_sw.sw_dpid == dpid:
                 # the host is not connected to any switch so its not in the topology anymore
                 self.hosts.pop(host)
                 log.info("Hosts: %s.", self.hosts)
                 self.paths_finder.notifyHostsChanged(self.hosts)
+        self.switches.pop(dpid, None)
         self.paths_finder.notifyLinksChanged()
         log.info("Switches: %s.", self.switches)
 
@@ -64,8 +64,6 @@ class FatTreeController:
         sw_dpid = dpid_to_str(event.entry.dpid)
         sw_port = event.entry.port
 
-        assert sw_dpid in self.switches
-
         host_mac = event.entry.macaddr.toStr()
         if event.leave:
             log.info("Host %s has disconnected from %s:%s.", host_mac, sw_dpid, sw_port)
@@ -73,7 +71,7 @@ class FatTreeController:
             self.hosts.pop(host_mac, None)
         else:
             log.info("Host %s has connected to %s:%s.", host_mac, sw_dpid, sw_port)
-            self.hosts[host_mac] = LinkToSwitch(self.switches[sw_dpid], sw_port)
+            self.hosts[host_mac] = LinkToSwitch(self.switches, sw_dpid, sw_port)
 
         log.info("Hosts: %s.", self.hosts)
         self.paths_finder.notifyHostsChanged(self.hosts)
