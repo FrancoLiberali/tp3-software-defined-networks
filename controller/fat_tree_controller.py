@@ -93,10 +93,13 @@ class FatTreeController:
             dpid = dpid_to_str(event.dpid)
 
             assert dpid in self.switches
-            assert src_mac in self.hosts
-            assert dst_mac in self.hosts
 
             new_flow = Flow.of(ip_packet)
+
+            if not src_mac in self.hosts or not dst_mac in self.hosts:
+                log.warn("No posible path beetween hosts %s and %s.",
+                         src_mac, dst_mac)
+                return
 
             log.info("Packet arrived to switch %s:%s from %s<%s> to %s<%s>",
                      dpid, event.port, src_mac,
@@ -122,6 +125,8 @@ class FatTreeController:
     def _set_path(self, src_sw, dst_sw, src_mac, dst_mac, flow):
         path_to = self.paths_finder.get_path(src_sw.dpid, dst_sw.dpid)      # Since I'm already going from one host to
         path_from = self.paths_finder.get_path(dst_sw.dpid, src_sw.dpid)    # another, I should define the way back as well
+        if not path_from or not path_to:
+            return # no posible path
         paths = [path_to, path_from]                                        # in order to avoid another trip to controller
         macs = [dst_mac, src_mac]
         flows = [flow, flow.reverse()]
