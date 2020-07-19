@@ -4,8 +4,9 @@ import pox.openflow.discovery
 import pox.host_tracker
 import pox.openflow.libopenflow_01 as of
 from pox.lib.util import dpid_to_str
-from extensions.shortest_paths_finder import ShortestPathsFinder, SW_DPID_INDEX, SW_PORT_INDEX
+from extensions.shortest_paths_finder import ShortestPathsFinder
 from extensions.switch import Switch
+from extensions.link_to_switch import LinkToSwitch
 
 log = core.getLogger()
 
@@ -14,7 +15,7 @@ class FatTreeController:
     def __init__(self):
         # keys sw_dpid, values {sw_port: sw_dpid_linked}
         self.switches = {}
-        # keys host_mac, values (sw_dpid_linked, sw_port_linked}
+        # {host_mac: LinkToSwitch}
         self.hosts = {}
         self.paths_finder = ShortestPathsFinder()
         core.call_when_ready(
@@ -45,13 +46,13 @@ class FatTreeController:
 
         log.info("Switch %s has come down.", dpid)
         self.switches.pop(dpid, None)
-        for host, sw_dpid_and_port in self.hosts.items():
-            if sw_dpid_and_port[SW_DPID_INDEX] == dpid:
+        for host, link_to_sw in self.hosts.items():
+            if link_to_sw.sw_dpid == dpid:
                 # the host is not connected to any switch so its not in the topology anymore
                 self.hosts.pop(host)
                 log.info("Hosts: %s.", self.hosts)
-                self.paths_finder.notifyHostsChanged(self.switches, self.hosts)
-        self.paths_finder.notifyLinksChanged(self.switches)
+                self.paths_finder.notifyHostsChanged(self.hosts)
+        self.paths_finder.notifyLinksChanged()
         log.info("Switches: %s.", self.switches)
 
     def _handle_HostEvent(self, event):
@@ -64,6 +65,9 @@ class FatTreeController:
         """
         sw_dpid = dpid_to_str(event.entry.dpid)
         sw_port = event.entry.port
+
+        assert sw_dpid in self.switches
+
         host_mac = event.entry.macaddr.toStr()
         if event.leave:
             log.info("Host %s has disconnected from %s:%s.", host_mac,
@@ -73,10 +77,10 @@ class FatTreeController:
         else:
             log.info("Host %s has connected to %s:%s.", host_mac,
                      sw_dpid, sw_port)
-            self.hosts[host_mac] = (sw_dpid, sw_port)
+            self.hosts[host_mac] = LinkToSwitch(self.switches[sw_dpid], sw_port)
 
         log.info("Hosts: %s.", self.hosts)
-        self.paths_finder.notifyHostsChanged(self.switches,self.hosts)
+        self.paths_finder.notifyHostsChanged(self.hosts)
 
     def _handle_PacketIn(self, event):
         """Called when:
@@ -106,7 +110,7 @@ class FatTreeController:
                      src_ip, dst_mac, dst_ip)
 
             # src and dest connected to the same sw
-            if self.hosts[src_mac][SW_DPID_INDEX] == self.hosts[dst_mac][SW_DPID_INDEX]:
+            if self.hosts[src_mac].sw_dpid == self.hosts[dst_mac].sw_dpid:
                 sw = self.switches[dpid]
                 self._set_shared_switch_output_port(
                     sw, src_ip, dst_ip, dst_mac)
@@ -114,10 +118,8 @@ class FatTreeController:
                 self._set_shared_switch_output_port(
                     sw, dst_ip, src_ip, src_mac)
             else:
-                sw_linked_to_src = self.switches[self.hosts[src_mac]
-                                                 [SW_DPID_INDEX]]
-                sw_linked_to_dst = self.switches[self.hosts[dst_mac]
-                                                 [SW_DPID_INDEX]]
+                sw_linked_to_src = self.hosts[src_mac].sw
+                sw_linked_to_dst = self.hosts[dst_mac].sw
                 self._set_path(sw_linked_to_src, sw_linked_to_dst,
                                dst_mac, src_ip, dst_ip)
                 # set the response path too, to not come to the controller again on response
@@ -126,18 +128,18 @@ class FatTreeController:
             # dont lose the packet that generated the packet in
             packet_out = of.ofp_packet_out(data=eth_packet,
                                            action=of.ofp_action_output(port=of.OFPP_TABLE))
-            event.connection.send(packet_out)
+            self.hosts[src_mac].sw.connection.send(packet_out)
 
     def _set_shared_switch_output_port(self, sw, src_ip, dst_ip, dst_mac):
         sw.add_action_output(
-            src_ip, dst_ip, self.hosts[dst_mac][SW_PORT_INDEX])
+            src_ip, dst_ip, self.hosts[dst_mac].port)
 
     def _set_path(self, src, dst, dst_mac, src_ip, dst_ip):
         path = self.paths_finder.get_path(
             src.dpid, dst.dpid)
         for sw, output_port in path:
             if not output_port: # the last switch
-                output_port = self.hosts[dst_mac][SW_PORT_INDEX]
+                output_port = self.hosts[dst_mac].port
             sw.add_action_output(src_ip, dst_ip, output_port)
 
     def _handle_LinkEvent(self, event):
@@ -164,7 +166,7 @@ class FatTreeController:
             sw_1.add_link(link.port1, sw_2)
             sw_2.add_link(link.port2, sw_1)
             log.info("Switches: %s.", self.switches)
-            self.paths_finder.notifyLinksChanged(self.switches)
+            self.paths_finder.notifyLinksChanged()
         # idem check if setted because the link event is raised in both ways
         elif (
             event.removed
@@ -174,7 +176,7 @@ class FatTreeController:
             sw_1.remove_link(link.port1)
             sw_2.remove_link(link.port2)
             log.info("Switches: %s.", self.switches)
-            self.paths_finder.notifyLinksChanged(self.switches)
+            self.paths_finder.notifyLinksChanged()
 
 def launch():
     core.registerNew(FatTreeController)

@@ -17,10 +17,24 @@ class Switch:
         return self.dpid == other.dpid
     return False
 
+  def __hash__(self):
+    return hash(self.dpid)
+
   def add_link(self, port, switch):
     self.links[port] = switch
 
   def remove_link(self, port):
+    self.flow_table.remove_matching_entries(
+      of.ofp_match(dl_type=ethernet.IP_TYPE),
+      out_port=port
+    )
+    self.connection.send(
+      of.ofp_flow_mod(
+          command=of.OFPFC_DELETE,
+          action=of.ofp_action_output(port=port),
+          match=of.ofp_match(dl_type=ethernet.IP_TYPE)
+      )
+    )
     return self.links.pop(port, None)
 
   def get_linked_switches(self):
@@ -50,6 +64,19 @@ class Switch:
             of.ofp_action_output(port=output_port)
         ]
     )
+    overlapping_entry = self._find_overlapping_entry(new_entry)
+    command = of.OFPFC_ADD
+    if overlapping_entry:
+      self.flow_table.remove_entry(overlapping_entry)
+      command = of.OFPFC_MODIFY
 
     self.flow_table.add_entry(new_entry)
-    self.connection.send(new_entry.to_flow_mod())
+    flow_mod = new_entry.to_flow_mod()
+    flow_mod.command = command
+    self.connection.send(flow_mod)
+
+  def _find_overlapping_entry(self, entry):
+    for e in self.flow_table.entries:
+      if e.is_matched_by(entry.match) or entry.is_matched_by(e.match):
+        return e
+    return None
