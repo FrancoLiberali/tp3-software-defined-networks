@@ -1,13 +1,12 @@
 from pox.core import core
-from .path import Path
+from path import Path
 
 log = core.getLogger()
 
 class ShortestPathsFinder:
     def __init__(self):
         self.sws_linked_to_a_host = []
-        # origin_dpid: {destiny_dpid: Path}
-        self.shortest_paths = {}
+        self.shortest_paths = {}    # origin_dpid: {destiny_dpid: Path}
 
     def notifyHostsChanged(self, hosts):
         old_sws_linked_to_a_host = self.sws_linked_to_a_host
@@ -75,7 +74,7 @@ class ShortestPathsFinder:
         return self._keep_only_shortests(paths_from_the_next_level)
 
     def _keep_only_shortests(self, paths):
-        if (len(paths) > 0):
+        if len(paths) > 0:
             shortest = len(paths[0])
             for path in paths:
                 if len(path) < shortest:
