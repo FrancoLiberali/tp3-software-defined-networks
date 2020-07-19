@@ -27,8 +27,7 @@ class ShortestPathsFinder:
                 posible_paths = self.shortest_paths[origin][destiny]
                 return self.path_balancer.get_balanced(origin, destiny, posible_paths)
 
-        log.warn("No posible path beetween switches %s and %s.",
-                 origin, destiny)
+        log.warn("No posible path beetween switches %s and %s.", origin, destiny)
         return None
 
     def _calculate_switches_linked_to_a_host(self, hosts):
@@ -46,8 +45,6 @@ class ShortestPathsFinder:
                 ):
                     shortest_paths = self._find_paths(sw_origin, sw_destiny, Path(), [])
                     self._set_paths(sw_origin, sw_destiny, shortest_paths)
-
-        log.info("Shortest paths: %s.", self.shortest_paths)
 
     def _set_paths(self, sw_origin, sw_destiny, paths):
         shortest_paths_from_origin = self.shortest_paths.get(sw_origin.dpid, {})

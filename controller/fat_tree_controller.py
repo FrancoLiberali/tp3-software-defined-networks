@@ -33,7 +33,6 @@ class FatTreeController:
         log.info("Switch %s has come up.", dpid)
         if not dpid in self.switches:
             self.switches[dpid] = Switch(dpid, event.connection)
-        log.info("Switches: %s.", self.switches)
 
     def _handle_ConnectionDown(self, event):
         """
@@ -47,11 +46,9 @@ class FatTreeController:
             if link_to_sw.sw_dpid == dpid:
                 # the host is not connected to any switch so its not in the topology anymore
                 self.hosts.pop(host)
-                log.info("Hosts: %s.", self.hosts)
                 self.paths_finder.notifyHostsChanged(self.hosts)
         self.switches.pop(dpid, None)
         self.paths_finder.notifyLinksChanged()
-        log.info("Switches: %s.", self.switches)
 
     def _handle_HostEvent(self, event):
         """
@@ -73,7 +70,6 @@ class FatTreeController:
             log.info("Host %s has connected to %s:%s.", host_mac, sw_dpid, sw_port)
             self.hosts[host_mac] = LinkToSwitch(self.switches, sw_dpid, sw_port)
 
-        log.info("Hosts: %s.", self.hosts)
         if sw_dpid in self.switches: # only find new paths if the linked sw is already up
             self.paths_finder.notifyHostsChanged(self.hosts)
 
@@ -97,9 +93,8 @@ class FatTreeController:
 
             new_flow = Flow.of(ip_packet)
 
-            if not src_mac in self.hosts or not dst_mac in self.hosts:
-                log.warn("No posible path beetween hosts %s and %s.",
-                         src_mac, dst_mac)
+            if src_mac not in self.hosts or dst_mac not in self.hosts:
+                log.warn("No posible path beetween hosts %s and %s.", src_mac, dst_mac)
                 return
 
             log.info("Packet arrived to switch %s:%s from %s<%s> to %s<%s>",
@@ -164,7 +159,6 @@ class FatTreeController:
             log.info("Link has been added from %s:%s to %s:%s", dpid1, link.port1, dpid2, link.port2)
             sw_1.add_link(link.port1, sw_2)
             sw_2.add_link(link.port2, sw_1)
-            log.info("Switches: %s.", self.switches)
             self.paths_finder.notifyLinksChanged()
         # idem check if setted because the link event is raised in both ways
         elif (
@@ -174,7 +168,6 @@ class FatTreeController:
             log.info("Link has been removed from %s:%s to %s:%s", dpid1, link.port1, dpid2, link.port2)
             sw_1.remove_link(link.port1)
             sw_2.remove_link(link.port2)
-            log.info("Switches: %s.", self.switches)
             self.paths_finder.notifyLinksChanged()
 
 def launch():
